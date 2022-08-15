@@ -1,9 +1,12 @@
+#%%
 import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import os
 import glob
 import torch
+from torch.autograd import variable
 import torch.nn as nn
+import torch.nn.functional as F 
 import cv2
 import matplotlib.pyplot as plt
 import torchvision
@@ -13,84 +16,157 @@ import copy
 import tqdm
 from PIL import Image
 from tqdm import tqdm
+from zmq import device
 from model import AlexNet
-from dataloader import CatDogDataset
+from dataloader import *
+
+model = AlexNet()
+model.cuda()
+
+train_dir = glob.glob("data/train/*/*.jpg")
+test_dir = glob.glob("data/test/*/*.jpg")
+val_dir = glob.glob("data/validation/*/*.jpg")
+
+train_cat_files = [i for i in train_dir if 'cat' in i.split('/')[-1]]
+train_dog_files = [i for i in train_dir if 'dog' in i.split('/')[-1]]
+test_cat_files = [i for i in test_dir if 'cat' in i.split('/')[-1]]
+test_dog_files = [i for i in test_dir if 'dog' in i.split('/')[-1]]
+val_cat_files = [i for i in val_dir if 'cat' in i.split('/')[-1]]
+val_dog_files = [i for i in val_dir if 'dog' in i.split('/')[-1]]
+
+train_transform = transforms.Compose([
+transforms.Resize(256),
+transforms.ColorJitter(),
+transforms.RandomCrop(224),
+transforms.RandomHorizontalFlip(),
+transforms.Resize(256),
+transforms.ToTensor()
+])
+
+test_transform = transforms.Compose([
+transforms.Resize((256, 256)),
+transforms.ToTensor()
+])
+
+train_cats = CatDogDataset(train_cat_files, transform=train_transform)
+train_dogs = CatDogDataset(train_dog_files, transform=train_transform)
+test_cats = CatDogDataset(test_cat_files, transform=test_transform)
+test_dogs = CatDogDataset(test_dog_files, transform=test_transform)
+val_cats = CatDogDataset(val_cat_files, transform=test_transform)
+val_dogs = CatDogDataset(val_dog_files, transform=test_transform)
+
+train_catdogs = ConcatDataset([train_cats, train_dogs])
+test_catdogs = ConcatDataset([test_cats, test_dogs])
+val_catdogs = ConcatDataset([val_cats, val_dogs])
+
+train_dataloader = DataLoader(train_catdogs, batch_size=32, shuffle=True)
+test_dataloader = DataLoader(test_catdogs, batch_size=32, shuffle=False)
+val_dataloader = DataLoader(val_catdogs, batch_size=32, shuffle=False)
 
 
-def train(epochs:int, dataloader, model, optimizer, criterion):
-    loss_list = []
-    acc_list = []
-    model.train()
-    for epoch in tqdm(range(epochs)):
-        total_loss = 0.0
-        total_acc = 0
+### Train ###
+epochs = 2
 
-        for step, (samples, labels) in enumerate(tqdm(dataloader)):
-            samples, labels = samples.cuda(), labels.cuda()
-            optimizer.zero_grad()
-            output = model(samples)
-            loss = criterion(output, labels)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-            # scheduler.step()
+criterion = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
+
+for epoch in range(epochs):
+    epoch_loss = 0
+    epoch_accuracy = 0
+    
+    for data, label in train_dataloader:
+        data = data.cuda()
+        label = label.cuda()
+        
+        output = model(data)
+        loss = criterion(output, label)
+        
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        
+        acc = ((output.argmax(dim=1) == label).float().mean())
+        epoch_accuracy += acc/len(train_dataloader)
+        epoch_loss += loss/len(train_dataloader)
+        
+    print('Epoch : {}, train accuracy : {}, train loss : {}'.format(epoch+1, epoch_accuracy,epoch_loss))
+
+    with torch.no_grad():
+        epoch_val_accuracy=0
+        epoch_val_loss =0
+        for data, label in val_dataloader:
+            data = data.cuda()
+            label = label.cuda()
             
-            # if step % 50 == 0:
-            pred = torch.argmax(output, dim=1)
-            correct = pred.eq(labels)
-            acc = torch.mean(correct.float())
-        print('[Epoch {}/{}] Iteration {} -> Train Loss: {:.4f}, Accuracy: {:.3f}'.format(epoch+1, epochs, step, total_loss / len(dataloader), acc))
-        # loss_list.append(total_loss / 50)
-        # acc_list.append(acc.cpu())
-        total_loss = 0
+            val_output = model(data)
+            val_loss = criterion(val_output,label)
+        
+            acc = ((val_output.argmax(dim=1) == label).float().mean())
+            epoch_val_accuracy += acc/ len(val_dataloader)
+            epoch_val_loss += val_loss/ len(val_dataloader)
             
-            # itr += 1
+        print('Epoch : {}, val_accuracy : {}, val_loss : {}'.format(epoch+1, epoch_val_accuracy,epoch_val_loss))
+print(" Train over ")
 
+
+test_loss = 0.0
+class_correct = list(0. for i in range(2))
+class_total = list(0. for i in range(2))
+classes = ['cat', 'dog']
+
+model.eval()
+
+for data, target in test_dataloader:
+    data, target = data.cuda(), target.cuda()
+    output = model(data)
+
+    loss = criterion(output, target)
+    test_loss += loss.item()*data.size(0)
+    _, pred = torch.max(output, 1)
+    correct_tensor = pred.eq(target.data.view_as(pred))
+    correct = np.squeeze(correct_tensor.detach().cpu().numpy())
+
+    for i in range(8):
+        label = target.data[i]
+        class_correct[label] += correct[i].item()
+        class_total[label] += 1
+
+test_loss = test_loss/len(test_dataloader.dataset)
+print('Test Loss: {:.6f}\n' .format(test_loss))
+
+for i in range(2):
+    if class_total[i] > 0 :
+        print('Test Accuracy of %5s: %2d%% (%2d/%2d)' % (
+            classes[i], 100*class_correct[i]/class_total[i], np.sum(class_correct[i]), np.sum(class_total[i])))
+    else:
+        print('Test Accuracy of %5s: N/A' % (classes[i]))
+
+print('\nTest Accuracy (Overall): %2d%% (%2d/%2d)' % (
+    100. * np.sum(class_correct) / np.sum(class_total),
+    np.sum(class_correct), np.sum(class_total)))
+
+
+
+
+# plt.plot(train_losses, label = 'loss')
+# plt.plot(train_accuracies, label = 'accuracy')
+# plt.legend()
+# plt.title('train loss and accuracy')
+# plt.show()
+
+# plt.plot(val_losses, label = 'loss')
+# plt.plot(val_accuracies, label = 'accuracy')
+# plt.legend()
+# plt.title('validation loss and accuracy')
+# plt.show()
+        
 
 if __name__ == "__main__":
-    epochs = 70
-    model = AlexNet()
-    model.cuda()
+    train_x, train_y = next(iter(train_dataloader))
+    test_x, test_y = next(iter(test_dataloader))
 
-    train_dir = glob.glob("data/train/*/*.jpg")
-    val_dir = glob.glob("data/validation/*/*.jpg")
-    test_dir = glob.glob("data/test/*/*.jpg")
-
-        
-    cat_files = [tf for tf in train_dir if 'cat' in tf.split('/')[-1]]
-    dog_files = [tf for tf in train_dir if 'dog' in tf.split('/')[-1]]
-
-    tst_cat_files = [tf for tf in test_dir if 'cat' in tf.split('/')[-1]]
-    tst_dog_files = [tf for tf in test_dir if 'dog' in tf.split('/')[-1]]
-
-    data_transform = transforms.Compose([
-    transforms.Resize(256),
-    transforms.ColorJitter(),
-    transforms.RandomCrop(224),
-    transforms.RandomHorizontalFlip(),
-    transforms.Resize(128),
-    transforms.ToTensor()
-    ])
-
-    test_transform = transforms.Compose([
-        transforms.Resize((128,128)),
-        transforms.ToTensor()
-    ])
+    train_x, train_y = next(iter(train_dataloader))
+    test_x, test_y = next(iter(test_dataloader))
 
 
-    cats = CatDogDataset(cat_files, train_dir, transform=data_transform)
-    dogs = CatDogDataset(dog_files, train_dir, transform=data_transform)
-
-    tst_cats = CatDogDataset(tst_cat_files, test_dir, transform=test_transform)
-    tst_dogs = CatDogDataset(tst_dog_files, test_dir, transform=test_transform)
-
-    catdogs = ConcatDataset([cats, dogs])
-    tst_catdogs = ConcatDataset([tst_cats, tst_dogs])
-
-    tr_dl = DataLoader(catdogs, batch_size=16, shuffle=True)
-    tst_dl = DataLoader(tst_catdogs, batch_size=32, shuffle=False)
-
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[500,1000,1500], gamma=0.5)
-    train(epochs, tr_dl, model, optimizer, criterion)
+# %%

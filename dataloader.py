@@ -1,3 +1,4 @@
+#%%
 import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import os
@@ -9,81 +10,82 @@ import matplotlib.pyplot as plt
 import torchvision
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from torchvision import transforms
-import copy
-import tqdm
 from PIL import Image
 
 
 class CatDogDataset(Dataset):
-    def __init__(self, file_list, dir, mode='train', transform=None):
+
+    def __init__(self, file_list, transform=None):
         self.file_list = file_list
-        self.dir = dir
-        self.mode= mode
         self.transform = transform
-        if self.mode == 'train':
-            if 'dog' in self.file_list[0].split('/')[-1]:
-                self.label = 1
-            else:
-                self.label = 0
-            
+
     def __len__(self):
         return len(self.file_list)
     
     def __getitem__(self, idx):
-        img = Image.open(self.dir[idx])
+        img_path = self.file_list[idx]
+        img = Image.open(self.file_list[idx])
+        img_transformed = self.transform(img)
 
-        if self.transform:
-            img = self.transform(img)
-        # if self.mode == 'train':
-        img = img.numpy()
-        return img.astype('float32'), self.label
-        # else:
-        #     img = img.numpy()
-        #     return img.astype('float32'), self.file_list[idx]
-        
+        label = img_path.split('/')[-1][:3]
+        if label == 'cat':
+            label=0
+        elif label == 'dog':
+            label=1
+        # import pdb; pdb.set_trace()
+
+        return img_transformed, label
+
 
 if __name__ == "__main__":
+    a =2
+train_dir = glob.glob("data/train/*/*.jpg")
+test_dir = glob.glob("data/test/*/*.jpg")
+val_dir = glob.glob("data/validation/*/*.jpg")
 
-    train_dir = glob.glob("data/train/*/*.jpg")
-    val_dir = glob.glob("data/validation/*/*.jpg")
-    test_dir = glob.glob("data/test/*/*.jpg")
+train_cat_files = [i for i in train_dir if 'cat' in i.split('/')[-1]]
+train_dog_files = [i for i in train_dir if 'dog' in i.split('/')[-1]]
+test_cat_files = [i for i in test_dir if 'cat' in i.split('/')[-1]]
+test_dog_files = [i for i in test_dir if 'dog' in i.split('/')[-1]]
+val_cat_files = [i for i in val_dir if 'cat' in i.split('/')[-1]]
+val_dog_files = [i for i in val_dir if 'dog' in i.split('/')[-1]]
 
-        
-    cat_files = [tf for tf in train_dir if 'cat' in tf.split('/')[-1]]
-    dog_files = [tf for tf in train_dir if 'dog' in tf.split('/')[-1]]
+train_transform = transforms.Compose([
+transforms.Resize(256),
+transforms.ColorJitter(),
+transforms.RandomCrop(224),
+transforms.RandomHorizontalFlip(),
+transforms.Resize(256),
+transforms.ToTensor()
+])
 
-    tst_cat_files = [tf for tf in test_dir if 'cat' in tf.split('/')[-1]]
-    tst_dog_files = [tf for tf in test_dir if 'dog' in tf.split('/')[-1]]
+test_transform = transforms.Compose([
+transforms.Resize((256, 256)),
+transforms.ToTensor()
+])
 
-    data_transform = transforms.Compose([
-    transforms.Resize(256),
-    transforms.ColorJitter(),
-    transforms.RandomCrop(224),
-    transforms.RandomHorizontalFlip(),
-    transforms.Resize(128),
-    transforms.ToTensor()
-    ])
+train_cats = CatDogDataset(train_cat_files, transform=train_transform)
+train_dogs = CatDogDataset(train_dog_files, transform=train_transform)
+test_cats = CatDogDataset(test_cat_files, transform=test_transform)
+test_dogs = CatDogDataset(test_dog_files, transform=test_transform)
+val_cats = CatDogDataset(val_cat_files, transform=test_transform)
+val_dogs = CatDogDataset(val_dog_files, transform=test_transform)
 
-    test_transform = transforms.Compose([
-        transforms.Resize((128,128)),
-        transforms.ToTensor()
-    ])
+train_catdogs = ConcatDataset([train_cats, train_dogs])
+test_catdogs = ConcatDataset([test_cats, test_dogs])
+val_catdogs = ConcatDataset([val_cats, val_dogs])
 
+train_dataloader = DataLoader(train_catdogs, batch_size=32, shuffle=True)
+test_dataloader = DataLoader(test_catdogs, batch_size=32, shuffle=False)
+val_dataloader = DataLoader(val_catdogs, batch_size=32, shuffle=False)
 
-    cats = CatDogDataset(cat_files, train_dir, transform=data_transform)
-    dogs = CatDogDataset(dog_files, train_dir, transform=data_transform)
-
-    tst_cats = CatDogDataset(tst_cat_files, test_dir, transform=test_transform)
-    tst_dogs = CatDogDataset(tst_dog_files, test_dir, transform=test_transform)
-
-    catdogs = ConcatDataset([cats, dogs])
-    tst_catdogs = ConcatDataset([tst_cats, tst_dogs])
-
-    tr_dl = DataLoader(catdogs, batch_size=16, shuffle=True)
-    tst_dl = DataLoader(tst_catdogs, batch_size=32, shuffle=False)
-
-
-    tr_x, tr_y = next(iter(tr_dl))
-    tst_x, tst_y = next(iter(tst_dl))
-
-    print(tr_y.size())
+    samples, labels = iter(train_dataloader).next()
+    classes = {0:'cat', 1:'dog'}
+    fig = plt.figure(figsize=(10,24))
+    for i in range(16):
+        a = fig.add_subplot(2,8,i+1)
+        a.set_title(classes[labels[i].item()])
+        a.axis('off')
+        a.imshow(np.transpose(samples[i].numpy(), (1,2,0)))
+    plt.subplots_adjust(bottom=0.2, top=0.6, hspace=0)
+# %%
