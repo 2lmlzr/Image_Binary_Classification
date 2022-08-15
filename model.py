@@ -2,138 +2,102 @@ import torch
 import torch.nn as nn
 from torchsummary import summary
 
-# class LRN(nn.Module):
-#   def __init__(self, local_size=1, alpha=1.0, beta=0.75, ACROSS_CHANNELS=True):
-#     super(LRN, self).__init__()
-#     self.ACROSS_CHANNELS = ACROSS_CHANNELS
-#     if ACROSS_CHANNELS:
-#       self.average=nn.AvgPool3d(kernel_size=(local_size, 1, 1),
-#               stride=1,
-#               padding=(int((local_size-1.0)/2), 0, 0))
-#     else:
-#         self.average=nn.AvgPool2d(kernel_size=local_size,
-#                 stride=1,
-#                 padding=int((local_size-1.0)/2))
-#     self.alpha = alpha
-#     self.beta = beta
+import torch.nn as nn
+import torch.nn.functional as F
+
+# CNN 작성
+class AlexNet(nn.Module):
+    def __init__(self):
+      super(AlexNet, self).__init__()
+
+      # input image = 224 x 244 x 3
+
+      # 224 x 224 x 3 --> 112 x 112 x 32 maxpool
+      self.conv1 = nn.Conv2d(3, 32, 3, padding=1) 
+      # 112 x 112x 32 --> 56 x 56 x 64 maxpool
+      self.conv2 = nn.Conv2d(32, 64, 3, padding=1) 
+      # 56 x 56 x 64 --> 28 x 28 x 128 maxpool
+      self.conv3 = nn.Conv2d(64, 128, 3, padding=1)     
+      # 28 x 28 x 128 --> 14 x 14 x 256 maxpool
+      self.conv4 = nn.Conv2d(128, 256, 3, padding=1)    
+
+      # maxpool 2 x 2
+      self.pool = nn.MaxPool2d(2, 2)
+      
+      # 28 x 28 x 128 vector flat 512개
+      self.fc1 = nn.Linear(256 * 14 * 14, 512)
+      # 카테고리 2개 클래스
+      self.fc2 = nn.Linear(512, 2) 
+      
+      # dropout 적용
+      self.dropout = nn.Dropout(0.5) # 0.25 해보고 0.5로 해보기. 값 저장하고나서
+
+    def forward(self, x):
+      # conv1 레이어에 relu 후 maxpool. 112 x 112 x 32
+      x = self.pool(F.relu(self.conv1(x)))
+      # conv2 레이어에 relu 후 maxpool. 56 x 56 x 64
+      x = self.pool(F.relu(self.conv2(x)))
+      # conv3 레이어에 relu 후 maxpool. 28 x 28 x 128
+      x = self.pool(F.relu(self.conv3(x)))
+      # conv4 레이어에 relu 후 maxpool. 14 x 14 x 256
+      x = self.pool(F.relu(self.conv4(x)))
+
+      # 이미지 펴기
+      x = x.view(-1, 256 * 14 * 14) 
+      # dropout 적용
+      x = self.dropout(x)
+      # fc 레이어에 삽입 후 relu
+      x = F.relu(self.fc1(x))
+      # dropout 적용
+      x = self.dropout(x)
+      
+      # 마지막 logsoftmax 적용
+      x = F.log_softmax(self.fc2(x), dim=1)
+      return x
+
+model = AlexNet() # 모델 생성
+print(model) # 출력
+model.cuda() # cuda 사용
 
 
-#   def forward(self, x):
-#     if self.ACROSS_CHANNELS:
-#         div = x.pow(2).unsqueeze(1)
-#         div = self.average(div).squeeze(1)
-#         div = div.mul(self.alpha).add(1.0).pow(self.beta)
-#     else:
-#         div = x.pow(2)
-#         div = self.average(div)
-#         div = div.mul(self.alpha).add(1.0).pow(self.beta)
-#     x = x.div(div)
-#     return x
-
-# class AlexNet(nn.Module):
-#     def __init__(self):
+# class AlexNet(nn.Module) :
+#     def __init__(self) -> None :
 #         super(AlexNet, self).__init__()
-
-#         # conv
-#         self.conv1 = nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0)
-#         self.conv2 = nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2)
-#         self.conv3 = nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1)
-#         self.conv4 = nn.Conv2d(384, 384, kernel_size=3, stride=1, padding=1)
-#         self.conv5 = nn.Conv2d(384, 256, kernel_size=3, stride=1, padding=1)
-
-#         # LRN
-#         self.LRN = LRN(local_size=5, alpha=0.0001, beta=0.75)
-
-#         # FC
-#         self.fc1 = nn.Linear(256*6*6, 4096)
-#         self.fc2 = nn.Linear(4096, 4096)
-#         self.fc3 = nn.Linear(4096, 2)
-
-#         # Dropout
-#         self.Dropout = nn.Dropout()
-
-
-
-#     def forward(self, x):
-#         # conv1 -> relu -> maxpool1
-#         # conv1: [n, 3, 227, 227] --> [n, 96, 55, 55]
-#         # maxpool1: [n, 96, 55, 55] --> [n, 96, 27, 27]
-#         x = F.relu(self.conv1(x))
-#         x = self.LRN(x)
-#         x = F.max_pool2d(x, (3, 3), 2)
-
-#         # conv2 -> relu -> maxpool2
-#         # conv2: [n, 96, 27, 27] --> [n, 256, 27, 27]
-#         # maxpool2: [n, 256, 27, 27] --> [n, 256, 13, 13]
-#         x = F.relu(self.conv2(x))
-#         x = self.LRN(x)
-#         x = F.max_pool2d(x, (3, 3), 2)
-
-#         # conv3 -> relu -> conv4 -> relu
-#         # oonv3: [n, 256, 13, 13] --> [n, 384, 13, 13]
-#         # conv4: [n, 384, 13, 13] --> [n, 384, 13, 13]
-#         x = F.relu(self.conv3(x))
-#         x = F.relu(self.conv4(x))
-
-#         # conv5 -> relu -> maxpool3
-#         # conv5: [n. 384, 13, 13] --> [n, 256, 13, 13]
-#         # maxpool3: [n, 256, 13, 13] --> [n, 256, 6, 6]
-#         x = F.relu(self.conv5(x))
-#         x = F.max_pool2d(x, (3, 3), 2)
-
-#         # need view first for conv --> FC
-#         x = x.view(x.size()[0], -1)
-
-#         # fc1 -> fc2 -> fc3 -> softmax
-#         # fc1: 256*6*6 --> 4096
-#         # fc2: 4096 --> 4096
-#         # fc3: 4096 --> 2
-#         x = F.relu(self.fc1(x))
-#         x = self.Dropout(x)
-#         x = F.relu(self.fc2(x))
-#         x = self.Dropout(x)
-#         x = self.fc3(x)
-#         x = F.softmax(x)
+#         self.features = nn.Sequential(
+#             nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
+#             nn.ReLU(inplace=True),
+#             nn.MaxPool2d(kernel_size=3, stride=2),
+#             nn.Conv2d(64, 192, kernel_size=5, padding=2),
+#             nn.ReLU(inplace=True),
+#             nn.MaxPool2d(kernel_size=3, stride=2),
+#             nn.Conv2d(192, 384, kernel_size=3, padding=1),
+#             nn.ReLU(inplace=True),
+#             nn.Conv2d(384, 256, kernel_size=3, padding=1),
+#             nn.ReLU(inplace=True),
+#             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+#             nn.ReLU(inplace=True),
+#             nn.MaxPool2d(kernel_size=3, stride=2),
+#         )
+        
+#         self.avgpool = nn.AdaptiveAvgPool2d((6, 6))
+#         self.classifier = nn.Sequential(
+#             nn.Dropout(),
+#             nn.Linear(256*6*6, 4096),
+#             nn.ReLU(inplace=True),
+#             nn.Dropout(),
+#             nn.Linear(4096, 512),
+#             nn.ReLU(inplace=True),
+#             nn.Linear(512, 1),)
+        
+#     def forward(self, x :torch.Tensor) -> torch.Tensor :
+#         x = self.features(x)
+#         x = self.avgpool(x)
+#         x = torch.flatten(x, 2)
+#         x = self.classifier(x)
 #         return x
-class AlexNet(nn.Module) :
-    def __init__(self) -> None :
-        super(AlexNet, self).__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2),
-            nn.Conv2d(64, 192, kernel_size=5, padding=2),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2),
-            nn.Conv2d(192, 384, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(384, 256, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2),
-        )
-        
-        self.avgpool = nn.AdaptiveAvgPool2d((6, 6))
-        self.classifier = nn.Sequential(
-            nn.Dropout(),
-            nn.Linear(256*6*6, 4096),
-            nn.ReLU(inplace=True),
-            nn.Dropout(),
-            nn.Linear(4096, 512),
-            nn.ReLU(inplace=True),
-            nn.Linear(512, 2),)
-        
-    def forward(self, x :torch.Tensor) -> torch.Tensor :
-        x = self.features(x)
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.classifier(x)
-        return x
 
 
 if __name__ == "__main__":
     model = AlexNet()
     print(model)
     
-    summary(model, input_size=(3, 256, 256))

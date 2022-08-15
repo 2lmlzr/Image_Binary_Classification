@@ -79,13 +79,13 @@ train_dataloader = DataLoader(train_catdogs, batch_size=32, shuffle=True)
 test_dataloader = DataLoader(test_catdogs, batch_size=32, shuffle=False)
 val_dataloader = DataLoader(val_catdogs, batch_size=32, shuffle=False)
 
-    samples, labels = iter(train_dataloader).next()
-    classes = {0:'cat', 1:'dog'}
-    fig = plt.figure(figsize=(10,24))
-    for i in range(16):
-        a = fig.add_subplot(2,8,i+1)
-        a.set_title(classes[labels[i].item()])
-        a.axis('off')
-        a.imshow(np.transpose(samples[i].numpy(), (1,2,0)))
-    plt.subplots_adjust(bottom=0.2, top=0.6, hspace=0)
+samples, labels = iter(train_dataloader).next()
+classes = {0:'cat', 1:'dog'}
+fig = plt.figure(figsize=(10,24))
+for i in range(16):
+    a = fig.add_subplot(2,8,i+1)
+    a.set_title(classes[labels[i].item()])
+    a.axis('off')
+    a.imshow(np.transpose(samples[i].numpy(), (1,2,0)))
+plt.subplots_adjust(bottom=0.2, top=0.6, hspace=0)
 # %%

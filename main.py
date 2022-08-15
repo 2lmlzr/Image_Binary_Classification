@@ -35,18 +35,17 @@ val_cat_files = [i for i in val_dir if 'cat' in i.split('/')[-1]]
 val_dog_files = [i for i in val_dir if 'dog' in i.split('/')[-1]]
 
 train_transform = transforms.Compose([
-transforms.Resize(256),
-transforms.ColorJitter(),
-transforms.RandomCrop(224),
-transforms.RandomHorizontalFlip(),
-transforms.Resize(256),
-transforms.ToTensor()
-])
+transforms.RandomRotation(30), # 랜덤 각도 회전
+transforms.RandomResizedCrop(224), # 랜덤 리사이즈 크롭
+transforms.RandomHorizontalFlip(), # 랜덤으로 수평 뒤집기
+transforms.ToTensor(), # 이미지를 텐서로
+transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
 test_transform = transforms.Compose([
-transforms.Resize((256, 256)),
-transforms.ToTensor()
-])
+transforms.Resize(255), # 이미지 리사이즈
+transforms.CenterCrop(224), # 중앙 224 x 244 크롭
+transforms.ToTensor(), 
+transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
 train_cats = CatDogDataset(train_cat_files, transform=train_transform)
 train_dogs = CatDogDataset(train_dog_files, transform=train_transform)
@@ -59,15 +58,15 @@ train_catdogs = ConcatDataset([train_cats, train_dogs])
 test_catdogs = ConcatDataset([test_cats, test_dogs])
 val_catdogs = ConcatDataset([val_cats, val_dogs])
 
-train_dataloader = DataLoader(train_catdogs, batch_size=32, shuffle=True)
-test_dataloader = DataLoader(test_catdogs, batch_size=32, shuffle=False)
-val_dataloader = DataLoader(val_catdogs, batch_size=32, shuffle=False)
+train_dataloader = DataLoader(train_catdogs, batch_size=8, shuffle=True)
+test_dataloader = DataLoader(test_catdogs, batch_size=8, shuffle=False)
+val_dataloader = DataLoader(val_catdogs, batch_size=8, shuffle=False)
 
 
 ### Train ###
-epochs = 2
+epochs = 3
 
-criterion = nn.CrossEntropyLoss()
+criterion = nn.NLLLoss()
 optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
 
 for epoch in range(epochs):
@@ -168,5 +167,5 @@ if __name__ == "__main__":
     train_x, train_y = next(iter(train_dataloader))
     test_x, test_y = next(iter(test_dataloader))
 
-
+    print(train_y, test_y)
 # %%
