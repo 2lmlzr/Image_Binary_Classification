@@ -8,7 +8,7 @@ The total number of images available for training is 2,000 and final testing was
 
 ## Architecture
 
-![](https://wikidocs.net/images/page/164787/AlexNet-Fig_03.png)
+![](https://wikidocs.net/images/page/164787/AlexNet-Fig_03.png)  
 First proposed architecture on AlexNet paper
 
 ## Dependencies (To be updated)
