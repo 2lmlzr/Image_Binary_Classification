@@ -8,7 +8,7 @@ The total number of images available for training is 2,000 and final testing was
 
 ## Architecture
 
-<img src="https://wikidocs.net/images/page/164787/AlexNet-Fig_03.png"/>
+<img src="https://wikidocs.net/images/page/164787/AlexNet-Fig_03.png">
 
 ## Dependencies (To be updated)
 - Pytorch
