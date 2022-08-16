@@ -39,9 +39,9 @@ class CatDogDataset(Dataset):
 
 if __name__ == "__main__":
     a =2
-train_dir = glob.glob("data/train/*/*.jpg")
-test_dir = glob.glob("data/test/*/*.jpg")
-val_dir = glob.glob("data/validation/*/*.jpg")
+train_dir = glob.glob("cats_and_dogs_small/train/*/*.jpg")
+test_dir = glob.glob("cats_and_dogs_small/test/*/*.jpg")
+val_dir = glob.glob("cats_and_dogs_small/validation/*/*.jpg")
 
 train_cat_files = [i for i in train_dir if 'cat' in i.split('/')[-1]]
 train_dog_files = [i for i in train_dir if 'dog' in i.split('/')[-1]]
