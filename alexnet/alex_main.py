@@ -1,26 +1,22 @@
-#%%
-import numpy as np # linear algebra
-import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
-import os
+import numpy as np 
 import glob
 import torch
 from torch.autograd import variable
 import torch.nn as nn
-import torch.nn.functional as F 
 import cv2
 import matplotlib.pyplot as plt
 import torchvision
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from torchvision import transforms
-import copy
 import tqdm
 from PIL import Image
 from tqdm import tqdm
 from zmq import device
-from model import AlexNet
-from dataloader import *
-import wandb
-wandb.login()
+from Classification.alexnet.alex_model import AlexNet
+from Classification.alexnet.alex_dataloader import *
+# import wandb
+# wandb.login()
+
 
 model = AlexNet()
 model.cuda()
