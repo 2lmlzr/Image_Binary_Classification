@@ -1,3 +1,4 @@
+from cProfile import label
 import torch
 import torch.nn as nn
 import torchvision
@@ -20,38 +21,27 @@ test_transform = transforms.Compose([
 
 class CustomDataset(Dataset):
     # Put cat and dog images together into CustomDataset
-    def __init__(self, file_list):
+    def __init__(self, file_list, transform=train_transform):
         self.file_list = file_list
-        s
+        self.transform = transform
         
         # Labeling by file name
-        for i in file_list:
+        self.label = []
+        for i in self.file_list:
             if 'cat' in i.split('/')[-1]:
-                self.label = 0
+                self.label.append(0)
             elif 'dog' in i.split('/')[-1]:
-                self.label = 1
-
-        # Image transformation
-        for i in file_list:
-            img = Image.open(self.file_list[i])
-            if transform_mode == 'train':
-                img_trans = self.train_transform
-            elif transform_mode == 'test' or 'val':
-                img_trans = self.test_transform
-
-
+                self.label.append(1)
         
     def __len__(self):
         return len(self.file_list)
 
     def __getitem__(self, idx):
-
-
-
-
-
-
+        # Image transformation
+        img = Image.open(self.file_list[idx])
+        img_trans = self.transform(img)
+        return img_trans, self.label
 
 
 if __name__ == "__main__":
-    a=CustomDataset()
+    a=1
