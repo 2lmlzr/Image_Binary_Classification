@@ -28,9 +28,9 @@ train_transform = transforms.Compose([
     transforms.RandomHorizontalFlip(),
     transforms.Resize(299),
     transforms.ToTensor(),])
-val_transform = transforms.Compose([
-    transforms.Resize(299),
-    transforms.ToTensor(),])
+# val_transform = transforms.Compose([
+#     transforms.Resize(299),
+#     transforms.ToTensor(),])
 test_transform = transforms.Compose([
     transforms.Resize(299),
     transforms.ToTensor(),])
