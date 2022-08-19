@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 from torch.nn import init
 import torch
+from torchsummary import summary
 
 __all__ = ['xception']
 
@@ -83,7 +84,7 @@ class Xception(nn.Module):
     Xception optimized for the ImageNet dataset, as specified in
     https://arxiv.org/pdf/1610.02357.pdf
     """
-    def __init__(self, num_classes=1000):
+    def __init__(self, num_classes=2):
         """ Constructor
         Args:
             num_classes: number of classes
@@ -139,9 +140,6 @@ class Xception(nn.Module):
         #-----------------------------
 
 
-
-
-
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
@@ -189,3 +187,12 @@ def xception(pretrained=False,**kwargs):
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['xception']))
     return model
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = Xception().to(device)
+
+if __name__ == "__main__":
+    x = torch.rand(3, 3, 299, 299).to(device)
+    output = model(x)
+    print('output size:', output.size())
+    summary(model, (3, 299, 299), device=device.type)
