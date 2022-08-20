@@ -13,9 +13,9 @@ from xcep_model import model
 
 
 # All train/validation/test file names regardless of cat of dog -> need to modularization
-all_train_jpg_list = glob.glob("/Users/mlzr/Computer_Vision/Classification/xceptionnet/cats_and_dogs_small/train/*/*.jpg")
-all_val_jpg_list = glob.glob("/Users/mlzr/Computer_Vision/Classification/xceptionnet/cats_and_dogs_small/validation/*/*.jpg")
-all_test_jpg_list = glob.glob("/Users/mlzr/Computer_Vision/Classification/xceptionnet/cats_and_dogs_small/test/*/*.jpg")
+all_train_jpg_list = glob.glob("/home/mlzr/Classification/xceptionnet/cats_and_dogs_small/train/*/*.jpg")
+all_val_jpg_list = glob.glob("/home/mlzr/Classification/xceptionnet/cats_and_dogs_small/validation/*/*.jpg")
+all_test_jpg_list = glob.glob("/home/mlzr/Classification/xceptionnet/cats_and_dogs_small/test/*/*.jpg")
 
 # Split cat and dog by file names -> need to modularization
 train_cat_jpg = [i for i in all_train_jpg_list if 'cat' in i.split('/')[-1]]
@@ -55,7 +55,7 @@ test_dataloader = DataLoader(test_catdog, batch_size=8, shuffle=False)
 criterion = nn.CrossEntropyLoss(reduction='sum')
 optimizer = optim.Adam(model.parameters(), lr=0.01)
 
-epochs = 1
+epochs = 30
 
 best_models = []
 
@@ -81,55 +81,41 @@ for epoch in range(epochs):
 ########################### validation ########################### 
     val_loss_list = []
     val_acc_list = []
-    for i, (input, label) in enumerate(val_dataloader):
+    for i, (input, target) in enumerate(val_dataloader):
         model.eval()
-        input, label = input.cuda(), label.cuda()
+        input, target = input.cuda(), target.cuda()
 
         with torch.no_grad():
             val_output = model(input)
-            val_loss = criterion(input, label).detach().cpu().numpy()
+            val_loss = criterion(val_output, target).detach().cpu().numpy()
 
             preds = torch.argmax(val_output, axis=1)
             preds = preds.detach().cpu().numpy()
-            batch_acc = (preds==label).mean()
+
+            target = target.detach().cpu().numpy()
+            batch_acc = (preds==target).mean()
 
             val_loss_list.append(val_loss)
             val_acc_list.append(batch_acc)
 
-    val_loss = np.mean(val_loss)
-    val_acc = np.mean(val_acc)
+    val_loss_mean = np.mean(val_loss_list)
+    val_acc_mean = np.mean(val_acc_list)
 
-    print(f'Epoch: {epoch}, valid loss: {val_loss:.6f}, valid acc: {val_acc:.6f}')
+    print(f'Epoch: {epoch}, valid loss: {val_loss_mean:.6f}, valid acc: {val_acc_mean:.6f}')
 
     val_acc_th = 0.7
     val_loss_th = 0.5
 
     # best model save based on loss
-    if val_loss_th > val_loss:
-        valid_th = val_loss
+    if val_loss_th > val_loss_mean:
+        valid_th = val_loss_mean
         best_models.append(model)
 
     # best model save based on accuracy
-    if val_acc_th < val_acc:
-        val_acc_max = val_acc
+    if val_acc_th < val_acc_mean:
+        val_acc_max = val_acc_mean
         best_models.append(model)
-
-
-
-
-
-
-            
-
-
-
-
-            
-
     
-
-
-
 
 
 if __name__ == "__main__":
@@ -154,6 +140,7 @@ if __name__ == "__main__":
     
     # wandb.init(project='Classification-xceptionnet', entity='mlzr2')
 
-    sample_intput, sample_label = next(iter(train_dataloader))
-    print("sample_input:", sample_intput)
-    print("sample_label:", sample_label)
+    # sample_intput, sample_label = next(iter(train_dataloader))
+    # print("sample_input:", sample_intput)
+    # print("sample_label:", sample_label)
+    a=1
