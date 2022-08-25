@@ -47,4 +47,3 @@ transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 ## Conclusion
 The Architecture and parameter used in this network are capable of producing accuracy of 74% on test dataset.
 Need to achieving more accuracy with fine tuning and additional dataset.
-These codes are not fully modularization yet, so I will seperate train.py and test.py from main.py module.
