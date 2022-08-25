@@ -9,15 +9,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 from xcep_dataloader import CustomDataset
 import wandb
+wandb.init()
 from xcep_model import model
+from tqdm import tqdm
 
 
-# All train/validation/test file names regardless of cat of dog -> need to modularization
+# All train/validation/test file names regardless of cat of dog 
 all_train_jpg_list = glob.glob("/home/mlzr/Classification/xceptionnet/cats_and_dogs_small/train/*/*.jpg")
 all_val_jpg_list = glob.glob("/home/mlzr/Classification/xceptionnet/cats_and_dogs_small/validation/*/*.jpg")
 all_test_jpg_list = glob.glob("/home/mlzr/Classification/xceptionnet/cats_and_dogs_small/test/*/*.jpg")
 
-# Split cat and dog by file names -> need to modularization
+# Split cat and dog by file names
 train_cat_jpg = [i for i in all_train_jpg_list if 'cat' in i.split('/')[-1]]
 train_dog_jpg = [i for i in all_train_jpg_list if 'dog' in i.split('/')[-1]]
 val_cat_jpg = [i for i in all_val_jpg_list if 'cat' in i.split('/')[-1]]
@@ -30,7 +32,7 @@ train_catdog_jpg = train_cat_jpg + train_dog_jpg
 val_catdog_jpg = val_cat_jpg + val_dog_jpg
 test_catdog_jpg = test_cat_jpg + test_dog_jpg
 
-# Define Image Transform function -> need to modularization
+# Define Image Transform function
 train_transform = transforms.Compose([
     transforms.RandomHorizontalFlip(),
     transforms.Resize((299, 299)),
@@ -47,75 +49,133 @@ val_catdog = CustomDataset(val_catdog_jpg, transform=test_transform)
 test_catdog = CustomDataset(test_catdog_jpg, transform=test_transform)
 
 train_dataloader = DataLoader(train_catdog, batch_size=8, shuffle=True)
-val_dataloader = DataLoader(val_catdog, batch_size=8, shuffle=False)
-test_dataloader = DataLoader(test_catdog, batch_size=8, shuffle=False)
+val_dataloader = DataLoader(val_catdog, batch_size=16, shuffle=False)
+test_dataloader = DataLoader(test_catdog, batch_size=16, shuffle=False)
 
 
-
-criterion = nn.CrossEntropyLoss(reduction='sum')
+criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01)
+# optimizer = optim.SGD(model.parameters(), lr=0.01)
 
-epochs = 30
+epochs = 100
 
-best_models = []
+acc_best_models = []
+loss_best_models = []
 
 for epoch in range(epochs):
-    epoch_loss = 0
-    epoch_accuracy = 0
-    avg_accuracy = 0
-
 ########################### Train ###########################
-    for i, (input, label) in enumerate(train_dataloader):
-        model.train()
-        input, label = input.cuda(), label.cuda()
-        train_output = model(input)
+    train_losses = 0
+    train_accuracies = 0
 
-        loss = criterion(train_output, label)
+
+    for i, (image, target) in enumerate(tqdm(train_dataloader)):
+        model.train()
+        image, target = image.cuda(), target.cuda()
+        train_output = model(image)
+
+        train_loss = criterion(train_output, target)
         optimizer.zero_grad()
-        loss.backward()
+        train_loss.backward()
         optimizer.step()
 
-        if (i+1) % 20 == 0 :
-            print(f'Epoch: {epoch} - Loss: {loss:.6f}')
+        train_losses += train_loss.item()
 
-########################### validation ########################### 
-    val_loss_list = []
-    val_acc_list = []
-    for i, (input, target) in enumerate(val_dataloader):
+        train_accuracy = ((train_output.argmax(dim=1) == target).float().mean()) # batch accuracy
+        train_accuracies += train_accuracy.item()
+        if i % 250 == 249:
+            print(f'Step: {i}, Loss: {train_losses / i}, Accuracy: {train_accuracies / i}')
+
+
+    print(f'Epoch: {epoch}, Loss: {train_losses / len(train_dataloader)}, Accuracy: {train_accuracies / len(train_dataloader)}')
+        # if (i+1) % 50 == 0 :
+        #     print(f'Epoch: {epoch}, Loss: {train_loss:.4f}, Accuracy: {train_accuracy:.4f}')
+        #     wandb.log({'train loss':train_loss, 'average train accuracy':train_accuracy})
+
+########################### Validation ########################### 
+    val_losses = 0
+    val_accuracies = 0
+    for i, (images, target) in enumerate(tqdm(val_dataloader)):
         model.eval()
-        input, target = input.cuda(), target.cuda()
+        images, target = images.cuda(), target.cuda()
 
         with torch.no_grad():
-            val_output = model(input)
-            val_loss = criterion(val_output, target).detach().cpu().numpy()
+            val_output = model(images)
+            val_loss = criterion(val_output, target)
 
-            preds = torch.argmax(val_output, axis=1)
-            preds = preds.detach().cpu().numpy()
+            val_preds = val_output.argmax(dim=1)
+            # val_preds = val_preds.detach().cpu().numpy()
 
-            target = target.detach().cpu().numpy()
-            batch_acc = (preds==target).mean()
+            val_losses += val_loss.item()
+            val_accuracy = (val_preds == target).float().mean() # batch accuracy
+            val_accuracies += val_accuracy.item()
 
-            val_loss_list.append(val_loss)
-            val_acc_list.append(batch_acc)
+    print(f'Epoch: {epoch}, validation loss: {val_losses / len(val_dataloader)}, validation accuracy: {val_accuracies / len(val_dataloader)}')
+    wandb.log({'average validation loss':val_losses/len(val_dataloader), 'average validation accuracy':val_accuracies/len(val_dataloader)})
 
-    val_loss_mean = np.mean(val_loss_list)
-    val_acc_mean = np.mean(val_acc_list)
-
-    print(f'Epoch: {epoch}, valid loss: {val_loss_mean:.6f}, valid acc: {val_acc_mean:.6f}')
-
-    val_acc_th = 0.7
-    val_loss_th = 0.5
+    val_loss_th = np.inf
+    val_acc_th = 0
 
     # best model save based on loss
-    if val_loss_th > val_loss_mean:
-        valid_th = val_loss_mean
-        best_models.append(model)
+    if val_loss_th > val_losses:
+        valid_th = val_losses
+        loss_best_models.append(model)
 
     # best model save based on accuracy
-    if val_acc_th < val_acc_mean:
-        val_acc_max = val_acc_mean
-        best_models.append(model)
+    if val_acc_th < val_accuracies:
+        val_acc_max = val_accuracies
+        acc_best_models.append(model)
     
+########################### Test ########################### 
+test_loss = 0.0
+class_correct = list(0. for i in range(2))
+class_total = list(0. for i in range(2))
+
+model.eval()
+
+for data, target in test_dataloader:
+    data, target = data.cuda(), target.cuda()
+    # 데이터를 output에 삽입
+    output = model(data)
+    # loss율 계산
+    loss = criterion(output, target)
+    # loss율 업데이트
+    test_loss += loss.item()*data.size(0)
+    # 1차원, 정답률 확인
+    _, pred = torch.max(output, 1)    
+    # pred와 데이터를 비교한다
+    correct_tensor = pred.eq(target.data.view_as(pred))
+    # torrect_tensor를 numpy로 바꾼 뒤 gpu 계산 또는 cpu 계산
+    correct = np.squeeze(correct_tensor.cpu().numpy())
+    # 몇 개 맞췄나 계산
+    for i in range(8): # 배치 사이즈로
+        label = target.data[i]
+        class_correct[label] += correct[i].item()
+        class_total[label] += 1
+
+        # batch_size 32 넣으면 index 오류가 발생함. 만약 배치사이즈 32넣을때 강제로 1250장씩 분류하면 중지되도록 설정
+        # 평소에는 주석
+        #if class_total == [1250.0, 1250.0]:
+          #break
+
+# 로스율 평균 계산
+test_loss = test_loss/len(test_dataloader.dataset)
+print('Test Loss: {:.6f}\n'.format(test_loss))
+classes = ['cat', 'dog']
+for i in range(2):
+    # 각 클래스 별 확률 출력
+    if class_total[i] > 0:
+        print('Test Accuracy of %5s: %2d%% (%2d/%2d)' % (
+            classes[i], 100 * class_correct[i] / class_total[i],
+            np.sum(class_correct[i]), np.sum(class_total[i])))
+    else:
+        print('Test Accuracy of %5s: N/A (no training examples)' % (classes[i]))
+
+# 최종 확률 출력
+print('\nTest Accuracy (Overall): %2d%% (%2d/%2d)' % (
+    100. * np.sum(class_correct) / np.sum(class_total),
+    np.sum(class_correct), np.sum(class_total)))
+
+
 
 
 if __name__ == "__main__":
@@ -140,7 +200,8 @@ if __name__ == "__main__":
     
     # wandb.init(project='Classification-xceptionnet', entity='mlzr2')
 
-    # sample_intput, sample_label = next(iter(train_dataloader))
-    # print("sample_input:", sample_intput)
+    # sample_input, sample_label = next(iter(train_dataloader))
+    # print("sample_input:", sample_input)
+    # print("sample_input size:" , sample_input.size())
     # print("sample_label:", sample_label)
     a=1

@@ -41,7 +41,6 @@ class CustomDataset(Dataset):
         img = Image.open(self.file_list[idx])
         img_trans = self.transform(img)
         return img_trans, self.label[idx]
-        import pdb; pdb.set_trace()
         
 if __name__ == "__main__":
-    a=1
+    a = 1
