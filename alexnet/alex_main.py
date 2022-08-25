@@ -7,15 +7,17 @@ import cv2
 import matplotlib.pyplot as plt
 import torchvision
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
+import torch.optim as optim
 from torchvision import transforms
 import tqdm
 from PIL import Image
 from tqdm import tqdm
 from zmq import device
-from Classification.alexnet.alex_model import AlexNet
-from Classification.alexnet.alex_dataloader import *
-# import wandb
-# wandb.login()
+from alex_model import AlexNet
+from alex_dataloader import *
+
+import wandb
+wandb.init()
 
 
 model = AlexNet()
@@ -61,103 +63,122 @@ test_dataloader = DataLoader(test_catdogs, batch_size=8, shuffle=False)
 val_dataloader = DataLoader(val_catdogs, batch_size=8, shuffle=False)
 
 
-########################### Train ###########################
-epochs = 2
-import torch.optim as optim
+epochs = 50
+
+acc_best_models = []
+loss_best_models = []
+
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=0.01)
 
 for epoch in range(epochs):
-    epoch_loss = 0
-    epoch_accuracy = 0
-    loss_history = []
-    
-    for data, label in train_dataloader:
-        data = data.cuda()
-        label = label.cuda()
-        
-        output = model(data)
-        loss = criterion(output, label)
-        
+########################### Train ###########################
+    train_losses = 0
+    train_accuracies = 0
+
+
+    for i, (image, target) in enumerate(tqdm(train_dataloader)):
+        model.train()
+        image, target = image.cuda(), target.cuda()
+        train_output = model(image)
+
+        train_loss = criterion(train_output, target)
         optimizer.zero_grad()
-        loss.backward()
+        train_loss.backward()
         optimizer.step()
-        
-        acc = ((output.argmax(dim=1) == label).float().mean())
-        epoch_accuracy += acc/len(train_dataloader)
-        epoch_loss += loss/len(train_dataloader)
-        loss_history.append(epoch_loss)
-        
-    print('Epoch : {}, train accuracy : {}, train loss : {}'.format(epoch+1, epoch_accuracy,epoch_loss))
+
+        train_losses += train_loss.item()
+
+        train_accuracy = ((train_output.argmax(dim=1) == target).float().mean()) # batch accuracy
+        train_accuracies += train_accuracy.item()
+        if i % 250 == 249:
+            print(f'Step: {i}, Loss: {train_losses / i}, Accuracy: {train_accuracies / i}')
 
 
-########################### validation ########################### 
-    with torch.no_grad():
-        epoch_val_accuracy=0
-        epoch_val_loss =0
-        for data, label in val_dataloader:
-            data = data.cuda()
-            label = label.cuda()
-            
-            val_output = model(data)
-            val_loss = criterion(val_output,label)
-        
-            acc = ((val_output.argmax(dim=1) == label).float().mean())
-            epoch_val_accuracy += acc/ len(val_dataloader)
-            epoch_val_loss += val_loss/ len(val_dataloader)
-            
-        print('Epoch : {}, val_accuracy : {}, val_loss : {}'.format(epoch+1, epoch_val_accuracy,epoch_val_loss))
-print(" Train over ")
+    print(f'Epoch: {epoch}, Loss: {train_losses / len(train_dataloader)}, Accuracy: {train_accuracies / len(train_dataloader)}')
+        # if (i+1) % 50 == 0 :
+        #     print(f'Epoch: {epoch}, Loss: {train_loss:.4f}, Accuracy: {train_accuracy:.4f}')
+        #     wandb.log({'train loss':train_loss, 'average train accuracy':train_accuracy})
 
+########################### Validation ########################### 
+    val_losses = 0
+    val_accuracies = 0
+    for i, (images, target) in enumerate(tqdm(val_dataloader)):
+        model.eval()
+        images, target = images.cuda(), target.cuda()
 
-########################### Eval ########################### 
+        with torch.no_grad():
+            val_output = model(images)
+            val_loss = criterion(val_output, target)
+
+            val_preds = val_output.argmax(dim=1)
+            # val_preds = val_preds.detach().cpu().numpy()
+
+            val_losses += val_loss.item()
+            val_accuracy = (val_preds == target).float().mean() # batch accuracy
+            val_accuracies += val_accuracy.item()
+
+    print(f'Epoch: {epoch}, validation loss: {val_losses / len(val_dataloader)}, validation accuracy: {val_accuracies / len(val_dataloader)}')
+    wandb.log({'average validation loss':val_losses/len(val_dataloader), 'average validation accuracy':val_accuracies/len(val_dataloader)})
+
+    val_loss_th = np.inf
+    val_acc_th = 0
+
+    # best model save based on loss
+    if val_loss_th > val_losses:
+        valid_th = val_losses
+        loss_best_models.append(model)
+
+    # best model save based on accuracy
+    if val_acc_th < val_accuracies:
+        val_acc_max = val_accuracies
+        acc_best_models.append(model)
+    
+########################### Test ########################### 
 test_loss = 0.0
 class_correct = list(0. for i in range(2))
 class_total = list(0. for i in range(2))
-classes = ['cat', 'dog']
 
 model.eval()
 
 for data, target in test_dataloader:
     data, target = data.cuda(), target.cuda()
     output = model(data)
-
     loss = criterion(output, target)
     test_loss += loss.item()*data.size(0)
-    _, pred = torch.max(output, 1)
+    _, pred = torch.max(output, 1)    
     correct_tensor = pred.eq(target.data.view_as(pred))
-    correct = np.squeeze(correct_tensor.detach().cpu().numpy())
-
-    for i in range(8):
+    correct = np.squeeze(correct_tensor.cpu().numpy())
+    for i in range(8): # 배치 사이즈로
         label = target.data[i]
         class_correct[label] += correct[i].item()
         class_total[label] += 1
 
 test_loss = test_loss/len(test_dataloader.dataset)
-print('Test Loss: {:.6f}\n' .format(test_loss))
-
+print('Test Loss: {:.6f}\n'.format(test_loss))
+classes = ['cat', 'dog']
 for i in range(2):
-    if class_total[i] > 0 :
+    if class_total[i] > 0:
         print('Test Accuracy of %5s: %2d%% (%2d/%2d)' % (
-            classes[i], 100*class_correct[i]/class_total[i], np.sum(class_correct[i]), np.sum(class_total[i])))
+            classes[i], 100 * class_correct[i] / class_total[i],
+            np.sum(class_correct[i]), np.sum(class_total[i])))
     else:
-        print('Test Accuracy of %5s: N/A' % (classes[i]))
+        print('Test Accuracy of %5s: N/A (no training examples)' % (classes[i]))
 
 print('\nTest Accuracy (Overall): %2d%% (%2d/%2d)' % (
     100. * np.sum(class_correct) / np.sum(class_total),
     np.sum(class_correct), np.sum(class_total)))
 
 
-#wandb.init(project="ml", entity="mlzr2")
-        
 
 if __name__ == "__main__":
-    train_x, train_y = next(iter(train_dataloader))
-    test_x, test_y = next(iter(test_dataloader))
 
     train_x, train_y = next(iter(train_dataloader))
     test_x, test_y = next(iter(test_dataloader))
 
-    print(train_y, test_y)
+    train_x, train_y = next(iter(train_dataloader))
+    test_x, test_y = next(iter(test_dataloader))
+
+    print(train_x.size())
 # %%
