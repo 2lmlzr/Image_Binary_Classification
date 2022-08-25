@@ -54,8 +54,8 @@ test_dataloader = DataLoader(test_catdog, batch_size=16, shuffle=False)
 
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.01)
-# optimizer = optim.SGD(model.parameters(), lr=0.01)
+# optimizer = optim.Adam(model.parameters(), lr=0.01)
+optimizer = optim.SGD(model.parameters(), lr=0.01)
 
 epochs = 100
 
@@ -189,4 +189,4 @@ if __name__ == "__main__":
     # print("sample_input:", sample_input)
     # print("sample_input size:" , sample_input.size())
     # print("sample_label:", sample_label)
-    a=1
+    pass
