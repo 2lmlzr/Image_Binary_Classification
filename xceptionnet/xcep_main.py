@@ -134,35 +134,21 @@ model.eval()
 
 for data, target in test_dataloader:
     data, target = data.cuda(), target.cuda()
-    # 데이터를 output에 삽입
     output = model(data)
-    # loss율 계산
     loss = criterion(output, target)
-    # loss율 업데이트
     test_loss += loss.item()*data.size(0)
-    # 1차원, 정답률 확인
     _, pred = torch.max(output, 1)    
-    # pred와 데이터를 비교한다
     correct_tensor = pred.eq(target.data.view_as(pred))
-    # torrect_tensor를 numpy로 바꾼 뒤 gpu 계산 또는 cpu 계산
     correct = np.squeeze(correct_tensor.cpu().numpy())
-    # 몇 개 맞췄나 계산
     for i in range(8): # 배치 사이즈로
         label = target.data[i]
         class_correct[label] += correct[i].item()
         class_total[label] += 1
 
-        # batch_size 32 넣으면 index 오류가 발생함. 만약 배치사이즈 32넣을때 강제로 1250장씩 분류하면 중지되도록 설정
-        # 평소에는 주석
-        #if class_total == [1250.0, 1250.0]:
-          #break
-
-# 로스율 평균 계산
 test_loss = test_loss/len(test_dataloader.dataset)
 print('Test Loss: {:.6f}\n'.format(test_loss))
 classes = ['cat', 'dog']
 for i in range(2):
-    # 각 클래스 별 확률 출력
     if class_total[i] > 0:
         print('Test Accuracy of %5s: %2d%% (%2d/%2d)' % (
             classes[i], 100 * class_correct[i] / class_total[i],
@@ -170,7 +156,6 @@ for i in range(2):
     else:
         print('Test Accuracy of %5s: N/A (no training examples)' % (classes[i]))
 
-# 최종 확률 출력
 print('\nTest Accuracy (Overall): %2d%% (%2d/%2d)' % (
     100. * np.sum(class_correct) / np.sum(class_total),
     np.sum(class_correct), np.sum(class_total)))
