@@ -3,7 +3,7 @@
 
 ## Problem Statement
 Implementing AlexNet for classifying dog and cat images.   
-The total number of images available for training is 2,000 and final testing was done on 500 images.     
+The total number of images available for training is 2,000 and final testing was done on 1000 images.     
 #   
 #   
    
